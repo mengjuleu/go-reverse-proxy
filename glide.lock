@@ -1,6 +1,8 @@
 hash: b5b5f58d4276243411e266fe229e238e3012ec14809c8ad975c31e82fc322edc
-updated: 2019-06-03T17:42:14.600222399Z
+updated: 2019-06-03T20:07:28.088213547Z
 imports:
 - name: github.com/gorilla/mux
   version: ed099d42384823742bba0bf9a72b53b55c9e2e38
+- name: gopkg.in/yaml.v2
+  version: 51d6538a90f86fe93ac480b35f37b2be17fef232
 testImports: []

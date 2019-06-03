@@ -2,14 +2,17 @@ package main
 
 import (
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
 	"net/http/httputil"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/gorilla/mux"
+	"gopkg.in/yaml.v2"
 )
 
 type override struct {
@@ -31,25 +34,30 @@ type upstream struct {
 	Name  string
 }
 
+// Upstream represents the upstream service
+type Upstream struct {
+	Name     string
+	Host     string
+	Port     string
+	Override override
+}
+
+// UpstreamConfig represents all configuration of upstream service
+type UpstreamConfig struct {
+	Upstreams []Upstream
+}
+
 func main() {
 	r := mux.NewRouter()
 
-	mp := map[string]config{
-		"ide": config{
-			Host: "localhost:9051",
-		},
-		"api": config{
-			Host: "localhost:9001",
-		},
-		"js": config{
-			Host: "localhost:9050",
-		},
-		"scmweb": config{
-			Host: "localhost:9023",
-		},
-		"mleumonster": config{
-			Host: "localhost:9000",
-		},
+	upstreamConfig, err := loadConfig("/opt/go/src/github.com/go-reverse-proxy/upstream.yaml")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	mp := map[string]Upstream{}
+	for _, u := range upstreamConfig.Upstreams {
+		mp[u.Name] = u
 	}
 
 	proxies := map[string]http.Handler{}
@@ -67,7 +75,6 @@ func main() {
 			proxy = generateProxy(conf)
 			proxies[prefix] = proxy
 		}
-		fmt.Println(ok)
 		proxy.ServeHTTP(w, r)
 	})
 
@@ -80,27 +87,42 @@ func getPrefix(host string) string {
 }
 
 // generateProxy generates a reverse proxy from given conf
-func generateProxy(conf config) http.Handler {
+func generateProxy(u Upstream) http.Handler {
 	proxy := &httputil.ReverseProxy{
 		Director: func(r *http.Request) {
-			originHost := conf.Host
+			originHost := fmt.Sprintf("%s:%s", u.Host, u.Port)
 			r.Header.Add("X-Forwarded-Host", r.Host)
 			r.Header.Add("X-Origin-Host", originHost)
 			r.Host = originHost
 			r.URL.Host = originHost
 			r.URL.Scheme = "http"
 
-			if conf.Override.Header != "" && conf.Override.Match != "" {
-				if r.Header.Get(conf.Override.Header) == conf.Override.Match {
-					r.URL.Path = conf.Override.Path
+			if u.Override.Header != "" && u.Override.Match != "" {
+				if r.Header.Get(u.Override.Header) == u.Override.Match {
+					r.URL.Path = u.Override.Path
 				}
 			}
 		},
 		Transport: &http.Transport{
 			Dial: (&net.Dialer{
-				Timeout: 5 * time.Second,
+				Timeout: 10 * time.Millisecond,
 			}).Dial,
 		},
 	}
 	return proxy
+}
+
+// loadConfig loads the configurations of upstream services from .yaml config file
+func loadConfig(config string) (UpstreamConfig, error) {
+	upstreamConfig := UpstreamConfig{}
+
+	data, err := ioutil.ReadFile(filepath.Clean(config))
+	if err != nil {
+		return upstreamConfig, err
+	}
+
+	if err := yaml.Unmarshal(data, &upstreamConfig); err != nil {
+		return upstreamConfig, err
+	}
+	return upstreamConfig, nil
 }
