@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -37,15 +38,40 @@ func main() {
 		"ide": config{
 			Host: "localhost:9051",
 		},
+		"api": config{
+			Host: "localhost:9001",
+		},
+		"js": config{
+			Host: "localhost:9050",
+		},
+		"scmweb": config{
+			Host: "localhost:9023",
+		},
+		"mleumonster": config{
+			Host: "localhost:9000",
+		},
 	}
 
+	proxies := map[string]http.Handler{}
+
 	r.HandleFunc("/{path:.*}", func(w http.ResponseWriter, r *http.Request) {
-		conf := mp[getPrefix(r.Host)]
-		proxy := generateProxy(conf)
+		prefix := getPrefix(r.Host)
+		conf := mp[prefix]
+
+		var (
+			ok    bool
+			proxy http.Handler
+		)
+
+		if proxy, ok = proxies[prefix]; !ok {
+			proxy = generateProxy(conf)
+			proxies[prefix] = proxy
+		}
+		fmt.Println(ok)
 		proxy.ServeHTTP(w, r)
 	})
 
-	log.Fatal(http.ListenAndServe(":9015", r))
+	log.Fatal(http.ListenAndServe(":80", r))
 }
 
 func getPrefix(host string) string {
