@@ -1,0 +1,11 @@
+services:
+- name: ide
+  port: 9051
+- name: api
+  port: 9001
+- name: js
+  port: 9050
+- name: scmweb
+  port: 9023
+- name: mleumonster
+  port: 9000

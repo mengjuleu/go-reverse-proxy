@@ -1,19 +1,19 @@
 package main
 
 import (
-	"fmt"
+	"errors"
 	"io/ioutil"
 	"log"
-	"net"
 	"net/http"
-	"net/http/httputil"
+	"os"
 	"path/filepath"
-	"strings"
-	"time"
 
-	"github.com/gorilla/mux"
+	"github.com/go-reverse-proxy/proxy"
+	"github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v2"
 )
+
+const FAILED_TIMEOUT = 15
 
 type override struct {
 	Header string
@@ -22,99 +22,55 @@ type override struct {
 	Path   string
 }
 
-type config struct {
-	Name     string
-	Path     string
-	Host     string
-	Override override
-}
-
-type upstream struct {
-	Proxy http.Handler
-	Name  string
-}
-
-// Upstream represents the upstream service
+// Upstream represents upstream host
 type Upstream struct {
-	Name     string
-	Host     string
-	Port     string
-	Override override
+	Active      bool
+	Host        string
+	LastAttempt int32
+	LastFailure int32
+}
+
+// Service represents the backend service
+type Service struct {
+	Name      string
+	Upstreams []Upstream
+	Port      string
+	Override  override
+	Proxy     http.Handler
 }
 
 // UpstreamConfig represents all configuration of upstream service
 type UpstreamConfig struct {
-	Upstreams []Upstream
+	Services []Service
 }
 
 func main() {
-	r := mux.NewRouter()
+	logger, err := configureLogger("text")
+	if err != nil {
+		logrus.Fatal(err)
+	}
 
 	upstreamConfig, err := loadConfig("/opt/go/src/github.com/go-reverse-proxy/upstream.yaml")
 	if err != nil {
-		log.Fatal(err)
+		logrus.Fatal(err)
 	}
 
-	mp := map[string]Upstream{}
-	for _, u := range upstreamConfig.Upstreams {
-		mp[u.Name] = u
+	rr, err := proxy.NewReverseRouter(
+		proxy.UseUpstreamConfig(upstreamConfig),
+		proxy.UseLogger(logger),
+	)
+
+	if err != nil {
+		logrus.Fatalln(err)
 	}
 
-	proxies := map[string]http.Handler{}
-
-	r.HandleFunc("/{path:.*}", func(w http.ResponseWriter, r *http.Request) {
-		prefix := getPrefix(r.Host)
-		conf := mp[prefix]
-
-		var (
-			ok    bool
-			proxy http.Handler
-		)
-
-		if proxy, ok = proxies[prefix]; !ok {
-			proxy = generateProxy(conf)
-			proxies[prefix] = proxy
-		}
-		proxy.ServeHTTP(w, r)
-	})
-
-	log.Fatal(http.ListenAndServe(":80", r))
-}
-
-func getPrefix(host string) string {
-	tokens := strings.Split(host, ".")
-	return tokens[0]
-}
-
-// generateProxy generates a reverse proxy from given conf
-func generateProxy(u Upstream) http.Handler {
-	proxy := &httputil.ReverseProxy{
-		Director: func(r *http.Request) {
-			originHost := fmt.Sprintf("%s:%s", u.Host, u.Port)
-			r.Header.Add("X-Forwarded-Host", r.Host)
-			r.Header.Add("X-Origin-Host", originHost)
-			r.Host = originHost
-			r.URL.Host = originHost
-			r.URL.Scheme = "http"
-
-			if u.Override.Header != "" && u.Override.Match != "" {
-				if r.Header.Get(u.Override.Header) == u.Override.Match {
-					r.URL.Path = u.Override.Path
-				}
-			}
-		},
-		Transport: &http.Transport{
-			Dial: (&net.Dialer{
-				Timeout: 10 * time.Millisecond,
-			}).Dial,
-		},
-	}
-	return proxy
+	logger.Infof("go-reverse-proxy - running on 80, pid: %d", os.Getpid())
+	log.Fatal(http.ListenAndServe(":80", rr))
 }
 
 // loadConfig loads the configurations of upstream services from .yaml config file
-func loadConfig(config string) (UpstreamConfig, error) {
-	upstreamConfig := UpstreamConfig{}
+func loadConfig(config string) (proxy.UpstreamConfig, error) {
+	upstreamConfig := proxy.UpstreamConfig{}
 
 	data, err := ioutil.ReadFile(filepath.Clean(config))
 	if err != nil {
@@ -125,4 +81,20 @@ func loadConfig(config string) (UpstreamConfig, error) {
 		return upstreamConfig, err
 	}
 	return upstreamConfig, nil
+}
+
+func configureLogger(format string) (*logrus.Logger, error) {
+	logger := logrus.New()
+	logger.Level = logrus.InfoLevel
+
+	switch format {
+	case "json":
+		logger.Formatter = &logrus.JSONFormatter{FieldMap: logrus.FieldMap{logrus.FieldKeyMsg: "message"}}
+	case "text":
+		logger.Formatter = &logrus.TextFormatter{}
+	default:
+		return nil, errors.New("Invalid log format value")
+	}
+
+	return logger, nil
 }
