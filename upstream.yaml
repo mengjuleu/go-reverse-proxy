@@ -7,5 +7,5 @@ services:
   port: 9050
 - name: scmweb
   port: 9023
-- name: mleumonster
+- name: bb
   port: 9000

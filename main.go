@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/go-reverse-proxy/proxy"
 	"github.com/sirupsen/logrus"
@@ -15,14 +16,18 @@ import (
 )
 
 const (
-	defaultPort = 80
+	defaultPort         = 80
+	defaultReadTimeout  = 15
+	defaultWriteTimeout = 15
 )
 
 func main() {
 	var (
-		logFormat  string
-		bind       string
-		configFile string
+		logFormat    string
+		bind         string
+		configFile   string
+		readTimeout  int
+		writeTimeout int
 	)
 
 	app := cli.NewApp()
@@ -48,6 +53,18 @@ func main() {
 			EnvVar:      "CONFIG",
 			Value:       "/opt/go/src/github.com/go-reverse-proxy/upstream.yaml",
 		},
+		cli.IntFlag{
+			Name:        "read-timeout",
+			Destination: &readTimeout,
+			EnvVar:      "READTIMEOUY",
+			Value:       defaultReadTimeout,
+		},
+		cli.IntFlag{
+			Name:        "write-timeout",
+			Destination: &writeTimeout,
+			EnvVar:      "WRITETIMEOUY",
+			Value:       defaultWriteTimeout,
+		},
 	}
 
 	app.Action = func(c *cli.Context) error {
@@ -71,10 +88,14 @@ func main() {
 		}
 
 		logger.Infof("go-reverse-proxy - running on 80, pid: %d", os.Getpid())
-		if err := http.ListenAndServe(bind, rr); err != nil {
-			return err
+
+		srv := &http.Server{
+			Handler:      rr,
+			Addr:         bind,
+			WriteTimeout: time.Duration(readTimeout) * time.Second,
+			ReadTimeout:  time.Duration(writeTimeout) * time.Second,
 		}
-		return nil
+		return srv.ListenAndServe()
 	}
 
 	err := app.Run(os.Args)

@@ -108,16 +108,12 @@ func (rr *ReverseRouter) route() {
 	rr.Router.PathPrefix("/m/dev/").Handler(http.StripPrefix("/m/dev/", http.FileServer(http.Dir("/opt/python/bitbucket/bitbucket/media/"))))
 
 	rr.Router.HandleFunc("/{path:.*}", func(w http.ResponseWriter, r *http.Request) {
-		if r.Host == ":" {
-			r.Host = "mleumonster.devbucket.org"
-		}
-
-		prefix := getPrefix(r.Host)
-		if _, ok := rr.services[prefix]; !ok {
+		name, _ := parseHost(r.Host)
+		if _, ok := rr.services[name]; !ok {
 			w.WriteHeader(200)
 			return
 		}
-		rr.services[prefix].Proxy.ServeHTTP(w, r)
+		rr.services[name].Proxy.ServeHTTP(w, r)
 	})
 }
 
@@ -180,7 +176,28 @@ func getHost(upstreams *[]Upstream) string {
 	return ""
 }
 
-func getPrefix(host string) string {
+func parseHost(host string) (string, string) {
+	if !strings.Contains(host, "devbucket.org") {
+		return "", ""
+	}
+
 	tokens := strings.Split(host, ".")
-	return tokens[0]
+
+	switch len(tokens) {
+	case 5:
+		// {name}.{site}.dev.devbucket.org
+		return tokens[0], tokens[1]
+	case 4:
+		if tokens[1] == "dev" {
+			// {site}.dev.devbucket.org
+			return "bb", tokens[0]
+		}
+		// {name}.{site}.devbucket.org
+		return tokens[0], tokens[1]
+	case 3:
+		// site.devbucket.org
+		return "bb", tokens[0]
+	}
+
+	return "", tokens[0]
 }
