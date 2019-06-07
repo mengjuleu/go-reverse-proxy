@@ -2,18 +2,25 @@ package proxy
 
 import (
 	"fmt"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"net/http/httputil"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/sirupsen/logrus"
+	"gopkg.in/yaml.v2"
 )
 
-// FAILED_TIMEOUT is the duration to retry broken service
-const FAILED_TIMEOUT = 15
+const (
+	// FailedTimeout is the duration to retry broken service
+	FailedTimeout = 15
+	// LadleProjectsPath is the path to ladle-projects folder
+	LadleProjectsPath = "/opt/other/ladle-projects/*.service.yaml"
+)
 
 type override struct {
 	Header string
@@ -34,7 +41,7 @@ type Upstream struct {
 type Service struct {
 	Name      string
 	Upstreams []Upstream
-	Port      string
+	Port      int
 	Override  override
 	Proxy     http.Handler
 }
@@ -48,7 +55,7 @@ type UpstreamConfig struct {
 type ReverseRouter struct {
 	*mux.Router
 	logger         *logrus.Logger
-	services       map[string]Service
+	services       map[string]http.Handler
 	upstreamConfig UpstreamConfig
 }
 
@@ -79,46 +86,45 @@ func NewReverseRouter(options ...func(*ReverseRouter) error) (*ReverseRouter, er
 	}
 
 	rr.Router = mux.NewRouter()
-	rr.services = make(map[string]Service)
+	rr.services = make(map[string]http.Handler)
 
-	for _, s := range rr.upstreamConfig.Services {
-		s.Upstreams = append(s.Upstreams, Upstream{
-			Host:        fmt.Sprintf("%s:%s", "localhost", s.Port),
-			LastAttempt: 0,
-			LastFailure: 0,
-		})
-		s.Upstreams = append(s.Upstreams, Upstream{
-			Host:        fmt.Sprintf("%s:%s", "shared1.dev.devbucket.org", s.Port),
-			LastAttempt: 0,
-			LastFailure: 0,
-		})
+	for _, s := range loadLadleService(LadleProjectsPath) {
+		s.Upstreams = append(s.Upstreams,
+			Upstream{
+				Host: fmt.Sprintf("%s:%d", "localhost", s.Port),
+			},
+			Upstream{
+				Host: fmt.Sprintf("%s:%d", "shared1.dev.devbucket.org", s.Port),
+			},
+			Upstream{
+				Host: fmt.Sprintf("%s:%d", "shared2.dev.devbucket.org", s.Port),
+			},
+		)
+
 		s.Proxy = rr.generateProxy(s)
-		rr.services[s.Name] = s
+
+		// Copy s here because s will be overritten in each iteration
+		service := s
+		rr.services[s.HostName] = &service
 	}
 
 	rr.route()
-
 	return rr, nil
 }
 
 func (rr *ReverseRouter) route() {
-	rr.Router.PathPrefix("/m/dev/dist/").Handler(http.StripPrefix("/m/dev/dist/", http.FileServer(http.Dir("/opt/python/bitbucket/bitbucket/local/build/dist/"))))
-	rr.Router.PathPrefix("/m/dev/css/").Handler(http.StripPrefix("/m/dev/css/", http.FileServer(http.Dir("/opt/python/bitbucket/bitbucket/local/build/css/"))))
-	rr.Router.PathPrefix("/m/dev/messages/").Handler(http.StripPrefix("/m/dev/messages/", http.FileServer(http.Dir("/opt/python/bitbucket/bitbucket/local/build/messages/"))))
-	rr.Router.PathPrefix("/m/dev/").Handler(http.StripPrefix("/m/dev/", http.FileServer(http.Dir("/opt/python/bitbucket/bitbucket/media/"))))
-
 	rr.Router.HandleFunc("/{path:.*}", func(w http.ResponseWriter, r *http.Request) {
 		name, _ := parseHost(r.Host)
 		if _, ok := rr.services[name]; !ok {
 			w.WriteHeader(200)
 			return
 		}
-		rr.services[name].Proxy.ServeHTTP(w, r)
+		rr.services[name].ServeHTTP(w, r)
 	})
 }
 
-// generateProxy generates a reverse proxy from given conf
-func (rr *ReverseRouter) generateProxy(s Service) http.Handler {
+// generateProxy generates a reverse proxy from given service
+func (rr *ReverseRouter) generateProxy(s LadleService) http.Handler {
 	proxy := &httputil.ReverseProxy{
 		Director: func(r *http.Request) {
 			originHost := getHost(&s.Upstreams)
@@ -151,13 +157,30 @@ func (rr *ReverseRouter) generateProxy(s Service) http.Handler {
 	return proxy
 }
 
+// loadLadleService loads service config from ladle-projects.
+// It filters out service with no port
+func loadLadleService(path string) []LadleService {
+	services := []LadleService{}
+	files, _ := filepath.Glob(path)
+	for _, f := range files {
+		ladleService := LadleService{}
+		data, _ := ioutil.ReadFile(filepath.Clean(f))
+		yaml.Unmarshal(data, &ladleService)
+		if ladleService.Port > 0 {
+			services = append(services, ladleService)
+		}
+	}
+	return services
+}
+
+// getHost returns available host from service's upstreams
 func getHost(upstreams *[]Upstream) string {
 	for _, u := range *upstreams {
 		if u.Active {
 			return u.Host
 		}
 
-		if int32(time.Now().Unix())-u.LastFailure < FAILED_TIMEOUT {
+		if int32(time.Now().Unix())-u.LastFailure < FailedTimeout {
 			continue
 		}
 
@@ -176,6 +199,8 @@ func getHost(upstreams *[]Upstream) string {
 	return ""
 }
 
+// parseHost parses the incoming request's host and
+// returns service name and site
 func parseHost(host string) (string, string) {
 	if !strings.Contains(host, "devbucket.org") {
 		return "", ""
