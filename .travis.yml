@@ -1,0 +1,9 @@
+language: go
+
+go_import_path: github.com/go-reverse-proxy
+
+go:
+  - 1.11.5
+
+script:
+  - make
