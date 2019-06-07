@@ -87,7 +87,7 @@ func main() {
 			logrus.Fatalln(err)
 		}
 
-		logger.Infof("go-reverse-proxy - running on 80, pid: %d", os.Getpid())
+		logger.Infof("go-reverse-proxy - running on %s, pid: %d", bind, os.Getpid())
 
 		srv := &http.Server{
 			Handler:      rr,
