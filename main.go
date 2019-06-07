@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/go-reverse-proxy/proxy"
+	"github.com/mengjuleu/go-reverse-proxy/proxy"
 	"github.com/sirupsen/logrus"
 	"gopkg.in/urfave/cli.v1"
 	"gopkg.in/yaml.v2"
