@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/gorilla/websocket"
 	"github.com/mengjuleu/go-reverse-proxy/proxy"
 	"github.com/sirupsen/logrus"
 	"gopkg.in/urfave/cli.v1"
@@ -19,6 +20,8 @@ const (
 	defaultPort         = 80
 	defaultReadTimeout  = 15
 	defaultWriteTimeout = 15
+	readBufferSize      = 4096
+	writeBufferSize     = 4096
 )
 
 func main() {
@@ -73,13 +76,22 @@ func main() {
 			return err
 		}
 
-		upstreamConfig, err := loadConfig(configFile)
-		if err != nil {
-			return err
+		// Config websocket upgrader
+		upgrader := websocket.Upgrader{
+			ReadBufferSize:  readBufferSize,
+			WriteBufferSize: writeBufferSize,
 		}
 
+		/*
+			upstreamConfig, err := loadConfig(configFile)
+			if err != nil {
+				return err
+			}
+		*/
+
 		rr, err := proxy.NewReverseRouter(
-			proxy.UseUpstreamConfig(upstreamConfig),
+			//proxy.UseUpstreamConfig(upstreamConfig),
+			proxy.UseUpgrader(upgrader),
 			proxy.UseLogger(logger),
 		)
 
@@ -100,6 +112,7 @@ func main() {
 
 	err := app.Run(os.Args)
 	if err != nil {
+		fmt.Println(err)
 		os.Exit(1)
 	}
 }
