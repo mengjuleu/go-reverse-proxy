@@ -1,6 +1,6 @@
 language: go
 
-go_import_path: github.com/go-reverse-proxy
+go_import_path: github.com/mengjuleu/go-reverse-proxy
 
 go:
   - 1.12.4
