@@ -2,10 +2,10 @@ CMD=github.com/go-reverse-proxy
 
 all: test test-slow
 
-test:
+test: .gotdeps
 	go test -race -v ./...
 
-test-slow:
+test-slow: .gotdeps
 	go test -tags=slow -race -v ./...
 
 lint: .gotlint
@@ -18,10 +18,18 @@ lint: .gotlint
 
 setup: .gotlint
 
-install:
+install: .gotdeps
 	go install $(CMD)
 
 .gotlint:
 	go get github.com/alecthomas/gometalinter
 	gometalinter --install
+	touch $@
+
+.gotglide:
+	go get github.com/Masterminds/glide
+	touch $@
+
+.gotdeps: .gotglide glide.lock
+	glide install
 	touch $@
