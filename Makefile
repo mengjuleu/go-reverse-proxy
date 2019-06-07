@@ -1,4 +1,4 @@
-CMD=github.com/go-reverse-proxy
+CMD=github.com/mengjuleu/go-reverse-proxy
 
 all: test test-slow
 
