@@ -1,2 +1,5 @@
 vendor/
 go-reverse-proxy
+.gotdeps
+.gotglide
+.gotlint
