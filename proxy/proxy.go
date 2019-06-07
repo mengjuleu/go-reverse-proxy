@@ -89,6 +89,10 @@ func NewReverseRouter(options ...func(*ReverseRouter) error) (*ReverseRouter, er
 	rr.services = make(map[string]http.Handler)
 
 	for _, s := range loadLadleService(LadleProjectsPath) {
+		if s.HostName == "" {
+			continue
+		}
+
 		s.Upstreams = append(s.Upstreams,
 			Upstream{
 				Host: fmt.Sprintf("%s:%d", "localhost", s.Port),
