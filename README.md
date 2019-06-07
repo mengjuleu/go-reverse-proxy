@@ -1,7 +1,7 @@
 # go-reverse-proxy
 [![Build Status](https://travis-ci.org/mengjuleu/go-reverse-proxy.svg?branch=master)](https://travis-ci.org/mengjuleu/go-reverse-proxy)
 
-go-reverse-proxy is a Gloang-based HTTP proxy.
+go-reverse-proxy is a Golang-based HTTP proxy.
 
 ## Install
 
