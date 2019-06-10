@@ -86,6 +86,20 @@ func UseUpstreamConfig(config UpstreamConfig) func(*ReverseRouter) error {
 	}
 }
 
+// NewServer creates a HTTP server that proxies HTTP traffic
+func NewServer(options ...func(*ReverseRouter) error) (*http.Server, error) {
+	rr, err := NewReverseRouter(options...)
+	if err != nil {
+		return nil, err
+	}
+
+	srv := &http.Server{
+		Handler: rr,
+	}
+
+	return srv, nil
+}
+
 // NewReverseRouter creates a router for reverse proxy
 func NewReverseRouter(options ...func(*ReverseRouter) error) (*ReverseRouter, error) {
 	rr := &ReverseRouter{}

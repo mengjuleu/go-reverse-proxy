@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
-	"net/http"
 	"os"
 	"path/filepath"
 	"time"
@@ -82,31 +81,18 @@ func main() {
 			WriteBufferSize: writeBufferSize,
 		}
 
-		/*
-			upstreamConfig, err := loadConfig(configFile)
-			if err != nil {
-				return err
-			}
-		*/
-
-		rr, err := proxy.NewReverseRouter(
-			//proxy.UseUpstreamConfig(upstreamConfig),
+		srv, err := proxy.NewServer(
 			proxy.UseUpgrader(upgrader),
 			proxy.UseLogger(logger),
 		)
 
 		if err != nil {
-			logrus.Fatalln(err)
+			return err
 		}
 
-		logger.Infof("go-reverse-proxy - running on %s, pid: %d", bind, os.Getpid())
-
-		srv := &http.Server{
-			Handler:      rr,
-			Addr:         bind,
-			WriteTimeout: time.Duration(readTimeout) * time.Second,
-			ReadTimeout:  time.Duration(writeTimeout) * time.Second,
-		}
+		srv.Addr = bind
+		srv.ReadTimeout = time.Duration(writeTimeout) * time.Second
+		srv.WriteTimeout = time.Duration(readTimeout) * time.Second
 		return srv.ListenAndServe()
 	}
 
