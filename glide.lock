@@ -1,8 +1,10 @@
 hash: b5b5f58d4276243411e266fe229e238e3012ec14809c8ad975c31e82fc322edc
-updated: 2019-06-07T00:36:48.757798384Z
+updated: 2019-06-08T03:27:58.164276126Z
 imports:
 - name: github.com/gorilla/mux
   version: ed099d42384823742bba0bf9a72b53b55c9e2e38
+- name: github.com/gorilla/websocket
+  version: 80c2d40e9b91f2ef7a9c1a403aeec64d1b89a9a6
 - name: github.com/konsorten/go-windows-terminal-sequences
   version: 5c8c8bd35d3832f5d134ae1e1e375b69a4d25242
 - name: github.com/sirupsen/logrus

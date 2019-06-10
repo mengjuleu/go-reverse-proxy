@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gorilla/websocket"
+
 	"github.com/gorilla/mux"
 	"github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v2"
@@ -57,6 +59,15 @@ type ReverseRouter struct {
 	logger         *logrus.Logger
 	services       map[string]http.Handler
 	upstreamConfig UpstreamConfig
+	upgrader       websocket.Upgrader
+}
+
+// UseUpgrader sets the websocket HTTP upgrader
+func UseUpgrader(upgrader websocket.Upgrader) func(*ReverseRouter) error {
+	return func(rr *ReverseRouter) error {
+		rr.upgrader = upgrader
+		return nil
+	}
 }
 
 // UseLogger sets router's logger
@@ -117,6 +128,9 @@ func NewReverseRouter(options ...func(*ReverseRouter) error) (*ReverseRouter, er
 }
 
 func (rr *ReverseRouter) route() {
+	// Handle websocket traffic
+	rr.Router.HandleFunc("/{path:.*}", rr.websocketHandler).Headers("Connection", "upgrade")
+
 	rr.Router.HandleFunc("/{path:.*}", func(w http.ResponseWriter, r *http.Request) {
 		name, _ := parseHost(r.Host)
 		if _, ok := rr.services[name]; !ok {
